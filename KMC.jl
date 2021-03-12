@@ -4,8 +4,13 @@
     Author: Luke Causer
 =#
 
-function randomChoice(weights)
-    cs = cumsum(weights)
+"""
+    chooseTransition(weights::Vector{Float64})
+
+Randomly choice a choice from a list of weights.
+"""
+function chooseTransition(model)
+    cs = cumsum(model.transitionRates)
     r = rand(Float64) * cs[end]
     idx = 1
     for val in cs
@@ -18,21 +23,56 @@ function randomChoice(weights)
 end
 
 
-function simulation(model, initial, maxTime)
+"""
+    calculateEscapeRate(model)
+
+Calculate the escape rate of the model as the sum of transition rates.
+This can be overwritten when there are other ways to calculate the escape rate.
+"""
+function calculateEscapeRate(model)
+    model.escapeRate = sum(model.transitionRates)
+    return model.escapeRate
+end
+
+
+"""
+    calculateTransitionTime(model)
+
+Calculate the transition time
+"""
+function calculateTransitionTime(model)
+    return -log(rand(Float64)) / model.escapeRate
+end
+
+
+"""
+    simulation(model, initial, maxTime, observers)
+
+Do a stochastic simulation.
+"""
+function simulation(model, initial, maxTime, observers)
     # Set the initial state and variables
     setState!(model, initial)
     updateTransitionRates!(model)
     time = 0
     idxs = []
     times = []
+    measures = [[] for i=1:size(observers)[1]]
+
+    # Find initial measures
+    for i = 1:size(observers)[1]
+        push!(measures[i], measureObserver(observers[i], model))
+    end
 
     # Loop through until the max time has passed
     while time < maxTime
-        # Find a configuration to transition into and what time
-        idx = randomChoice(model.transitionRates)
-        escapeRate = sum(model.transitionRates)
-        transitionTime = -log(rand(Float64)) / escapeRate
+        # Calculate the transition time
+        escapeRate = calculateEscapeRate(model)
+        transitionTime = calculateTransitionTime(model)
         time += transitionTime
+
+        # Find a configuration to transition into and what time
+        idx = chooseTransition(model.transitionRates)
 
         if time < maxTime
             # Do the transition
@@ -40,15 +80,41 @@ function simulation(model, initial, maxTime)
             updateTransitionRates!(model, idx)
 
             # Store information
-            append!(idxs, idx)
-            append!(times, transitionTime)
+            push!(idxs, idx)
+            push!(times, transitionTime)
+
+            # Find measures
+            for i = 1:size(observers)[1]
+                push!(measures[i], measureObserver(observers[i], model))
+            end
         end
     end
 
-    return idxs, times
+    # Store the measures
+    for i = 1:size(observers)[1]
+        storeMeasure!(observers[i], measures[i])
+    end
+
+    return trajectory(model, initial, idxs, times, maxTime, measures)
 end
 
 
+"""
+    simulation(model, initial, maxTime)
+
+Do a stochastic simulation.
+"""
+function simulation(model, initial, maxTime)
+    return simulation(model, initial, maxTime, [])
+end
+
+
+"""
+    reconstruct(model, initial, idxs, times)
+
+Reconstruct a trajectory given then initial state, transition identifiers,
+and transition times.
+"""
 function reconstruct(model, initial, idxs, times)
     # Preallocate memory
     sz = size(idxs)[1]
@@ -73,4 +139,64 @@ function reconstruct(model, initial, idxs, times)
 
     return states, realTimes
 
+end
+
+
+"""
+    timeIntegrate(times, measure, maxTime)
+
+Perform a time integration over a measure.
+"""
+function timeIntegrate(times, measure, maxTime)
+    sz = size(measure)[1]
+    newTimes = copy(times)
+    push!(newTimes, maxTime)
+    integral = measure[1]*(newTimes[2]-newTimes[1])
+    for i = 2:sz
+        integral += measure[i]*(newTimes[i+1]-newTimes[i])
+    end
+
+    return integral
+end
+
+
+"""
+    KMC(model, numSims, maxTime, observers, quiet=false)
+
+Do KMC simulations and measure the given observers.
+"""
+function KMC(model, numSims, maxTime, observers, quiet=false)
+    # Split observers into configuration based and trajectory based
+    configObservers = []
+    trajectoryObservers = []
+    for i = 1:size(observers)[1]
+        if observers[i].type == "configuration"
+            push!(configObservers, i)
+        else
+            push!(trajectoryObservers, i)
+        end
+    end
+
+    # Loop through all simulations
+    for sim = 1:numSims
+        # Perform a simulation
+        initial = initialState(model)
+        trajectory = simulation(model, initial, maxTime, observers[configObservers])
+
+        # Measure observables
+        i = 1
+        for idx in configObservers
+            measure = timeIntegrate(trajectory.times, observers[idx].currentMeasure, maxTime)
+            updateObserver!(observers[idx], measure)
+            i += 1
+        end
+        for idx in trajectoryObservers
+            observers[idx].currentMeasure = measureObserver(observers[idx], trajectory)
+            updateObserver!(observers[idx], observers[idx].currentMeasure)
+        end
+
+        if !quiet
+            println(string("Simulation ", sim, "/", numSims, " completed."))
+        end
+    end
 end

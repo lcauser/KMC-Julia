@@ -10,22 +10,33 @@ include("../templates/spin.jl")
 Updates the transition rates for the set state, only updating local rates
 if an identifier idx is provided.
 """
-function updateTransitionRates!(template)
-    for i = 1:template.size
+function updateTransitionRates!(template, idxMin, idxMax)
+    for i = idxMin:idxMax
+        constraint = Float64(0)
+        if i != 1
+            constraint += template.state[i-1]
+        end
+        if i != template.size
+            constraint += template.state[i+1]
+        end
+
         if template.state[i] == 1
-            template.transitionRates[i] = 1 - template.c
+            template.transitionRates[i] = constraint * (1 - template.c)
         else
-            template.transitionRates[i] = template.c
+            template.transitionRates[i] = constraint * template.c
         end
     end
 end
 
 function updateTransitionRates!(template, idx)
-    if template.state[idx] == 1
-        template.transitionRates[idx] = 1 - template.c
-    else
-        template.transitionRates[idx] = template.c
-    end
+    idxMin = max(1, idx-1)
+    idxMax = min(template.size, idx+1)
+
+    updateTransitionRates!(template, idxMin, idxMax)
+end
+
+function updateTransitionRates!(template)
+    updateTransitionRates!(template, 1, template.size)
 end
 
 
