@@ -3,24 +3,51 @@
 =#
 
 # Occupations
+"""
+    occupationsMeasure(model)
+
+Calculate the occupations of the system.
+"""
 function occupationsMeasure(model)
     return convert(Array{Float64}, copy(model.state))
 end
 
+"""
+    occupationsObserver(N::Int64)
+
+Create an observer to store occupations.
+"""
 function occupationsObserver(N)
     return observer("occupations", "configuration", occupationsMeasure, 0, zeros(N), zeros(N))
 end
 
 # Activity
+"""
+    activityMeasure(traj::trajectory)
+
+Calculate the activity of a trajectory.
+"""
 function activityMeasure(traj)
     return size(traj.times)[1]-1
 end
 
+
+"""
+    occupationsObserver()
+
+Create an observer to store the activity.
+"""
 function activityObserver()
     return observer("activity", "trajectory", activityMeasure, 0, 0, 0)
 end
 
+
 # Time dependant occupations
+"""
+    timeOccupationsMeasure(traj::trajectory, times)
+
+Calculate the time-occupations of a trajectory.
+"""
 function timeOccupationsMeasure(traj, times)
     # Loop through each time
     occupations = []
@@ -33,6 +60,12 @@ function timeOccupationsMeasure(traj, times)
     return occupations
 end
 
+
+"""
+    timeOccupationsObserver(N::Int64, times)
+
+Create an observer to store time-occupations.
+"""
 function timeOccupationsObserver(N, times)
     measure(traj) = timeOccupationsMeasure(traj, times)
     initial = []
@@ -44,6 +77,11 @@ end
 
 
 # Auto correlation function
+"""
+    autoCorrelationMeasure(traj::trajectory, times)
+
+Calculate the auto correlator of a trajectory.
+"""
 function autoCorrelationMeasure(traj, times)
     # Loop through each time
     correlations = []
@@ -56,6 +94,12 @@ function autoCorrelationMeasure(traj, times)
     return convert(Array{Float64}, correlations)
 end
 
+
+"""
+    autoCorrelationObserver(N::Int64, times)
+
+Create an observer to store auto correlations.
+"""
 function autoCorrelationObserver(times)
     measure(traj) = autoCorrelationMeasure(traj, times)
     initial = zeros(Float64, size(times))
@@ -64,6 +108,11 @@ end
 
 
 # Timescale of AC
+"""
+    timescaleMeasure(traj::trajectory)
+
+Measure the time-integrated timescale.
+"""
 function timescaleMeasure(traj)
     timescale = 0.0
     # Loop through each state
@@ -77,6 +126,12 @@ function timescaleMeasure(traj)
     return timescale
 end
 
+
+"""
+    timescaleObserver(N::Int64, times)
+
+Create an observer to store the time-integrated timescale.
+"""
 function timescaleObserver()
     measure(traj) = timescaleMeasure(traj)
     return observer("timescale", "trajectory", measure, 0, 0.0, 0.0)
