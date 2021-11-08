@@ -72,7 +72,7 @@ function simulation(model, initial, maxTime, observers)
         time += transitionTime
 
         # Find a configuration to transition into and what time
-        idx = chooseTransition(model.transitionRates)
+        idx = chooseTransition(model)
 
         if time < maxTime
             # Do the transition
